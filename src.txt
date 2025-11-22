@@ -1,0 +1,916 @@
+>>>     /src/app/api/brands/route.ts
+import { NextResponse } from "next/server";
+import Brand from "@/models/Brand";
+import {connectDB} from "@/lib/db";
+
+// GET all brands
+export async function GET() {
+  await connectDB();
+  const brands = await Brand.find().sort({ createdAt: -1 });
+  return NextResponse.json(brands);
+}
+
+// CREATE brand
+export async function POST(req: Request) {
+  try {
+    await connectDB();
+    const body = await req.json();
+
+    const brand = await Brand.create(body);
+    return NextResponse.json(brand, { status: 201 });
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+>>>     /src/app/api/brands/[id]/route.ts
+import { NextResponse } from "next/server";
+import Brand from "@/models/Brand";
+import {connectDB} from "@/lib/db";
+
+// GET one brand
+export async function GET(req: Request, { params }: any) {
+  await connectDB();
+  const brand = await Brand.findById(params.id);
+  return NextResponse.json(brand);
+}
+
+// UPDATE brand
+export async function PUT(req: Request, { params }: any) {
+  try {
+    await connectDB();
+    const body = await req.json();
+
+    const updated = await Brand.findByIdAndUpdate(params.id, body, {
+      new: true,
+    });
+
+    return NextResponse.json(updated);
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+// DELETE brand
+export async function DELETE(req: Request, { params }: any) {
+  try {
+    await connectDB();
+
+    await Brand.findByIdAndDelete(params.id);
+    return NextResponse.json({ message: "Brand deleted" });
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+>>>     /src/app/api/item-types/route.ts
+import { NextResponse } from "next/server";
+import ItemType from "@/models/ItemType";
+import {connectDB} from "@/lib/db";
+
+// GET all item types
+export async function GET() {
+  await connectDB();
+  const types = await ItemType.find().sort({ createdAt: -1 });
+  return NextResponse.json(types);
+}
+
+// CREATE item type
+export async function POST(req: Request) {
+  try {
+    await connectDB();
+    const body = await req.json();
+
+    const newType = await ItemType.create(body);
+    return NextResponse.json(newType, { status: 201 });
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+>>>     /src/app/api/item-types/[id]/route.ts
+import { NextResponse } from "next/server";
+import ItemType from "@/models/ItemType";
+import {connectDB} from "@/lib/db";
+
+// GET specific type
+export async function GET(req: Request, { params }: any) {
+  await connectDB();
+  const type = await ItemType.findById(params.id);
+  return NextResponse.json(type);
+}
+
+// UPDATE item type
+export async function PUT(req: Request, { params }: any) {
+  try {
+    await connectDB();
+    const body = await req.json();
+
+    const updated = await ItemType.findByIdAndUpdate(params.id, body, {
+      new: true,
+    });
+
+    return NextResponse.json(updated);
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+// DELETE item type
+export async function DELETE(req: Request, { params }: any) {
+  try {
+    await connectDB();
+
+    await ItemType.findByIdAndDelete(params.id);
+    return NextResponse.json({ message: "Deleted" });
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+>>>     /src/app/api/items/route.ts
+import { NextResponse } from "next/server";
+import Item from "@/models/Item";
+import {connectDB} from "@/lib/db";
+
+// GET all items
+export async function GET(req: Request) {
+  await connectDB();
+
+  const url = new URL(req.url);
+  const type = url.searchParams.get("type");
+  const brand = url.searchParams.get("brand");
+  const search = url.searchParams.get("search");
+
+  // building dynamic filter
+  let filter: any = {};
+  if (type) filter.typeId = type;
+  if (brand) filter.brandId = brand;
+  if (search) filter.name = { $regex: search, $options: "i" };
+
+  const items = await Item.find(filter)
+    .populate("typeId")
+    .populate("brandId")
+    .sort({ createdAt: -1 });
+
+  return NextResponse.json(items);
+}
+
+// CREATE item
+export async function POST(req: Request) {
+  try {
+    await connectDB();
+    const body = await req.json();
+
+    const item = await Item.create(body);
+    return NextResponse.json(item, { status: 201 });
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+>>>     /src/app/api/items/[id]/route.ts
+import { NextResponse } from "next/server";
+import Item from "@/models/Item";
+import {connectDB} from "@/lib/db";
+
+// GET one item
+export async function GET(req: Request, { params }: any) {
+  await connectDB();
+  const item = await Item.findById(params.id)
+    .populate("typeId")
+    .populate("brandId");
+
+  return NextResponse.json(item);
+}
+
+// UPDATE item
+export async function PUT(req: Request, { params }: any) {
+  try {
+    await connectDB();
+    const body = await req.json();
+
+    const updated = await Item.findByIdAndUpdate(params.id, body, {
+      new: true,
+    });
+
+    return NextResponse.json(updated);
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+// DELETE item
+export async function DELETE(req: Request, { params }: any) {
+  try {
+    await connectDB();
+
+    await Item.findByIdAndDelete(params.id);
+    return NextResponse.json({ message: "Item deleted" });
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+>>>     /src/app/api/orders/route.ts
+import { NextResponse } from "next/server";
+import {connectDB} from "@/lib/db";
+import InvoiceHeader from "@/models/InvoiceHeader";
+import InvoiceDetails from "@/models/InvoiceDetail";
+import Stock from "@/models/Stock";
+
+// GET all orders
+export async function GET() {
+  await connectDB();
+
+  const orders = await InvoiceHeader.find()
+    .populate("userId")
+    .populate("paymentMethodId")
+    .populate("addressId")
+    .populate("statusId")
+    .sort({ createdAt: -1 });
+
+  return NextResponse.json(orders);
+}
+
+// CREATE order (Header + Details)
+export async function POST(req: Request) {
+  try {
+    await connectDB();
+
+    const {
+      userId,
+      paymentMethodId,
+      addressId,
+      items,
+      discount = 0,
+      statusId,
+    } = await req.json();
+
+    if (!items || items.length === 0)
+      return NextResponse.json(
+        { message: "Order must include items" },
+        { status: 400 }
+      );
+
+    // 1️⃣ حساب الإجمالي
+    let total = 0;
+    items.forEach((i: any) => {
+      total += i.price * i.quantity;
+    });
+
+    const finalTotal = total - discount;
+
+    // 2️⃣ إنشاء الـ InvoiceHeader
+    const orderHeader = await InvoiceHeader.create({
+      userId,
+      paymentMethodId,
+      addressId,
+      statusId,
+      total,
+      discount,
+      finalTotal,
+    });
+
+    // 3️⃣ إنشاء InvoiceDetails
+    for (const item of items) {
+      await InvoiceDetails.create({
+        invoiceId: orderHeader._id,
+        itemId: item.itemId,
+        quantity: item.quantity,
+        price: item.price,
+        total: item.price * item.quantity,
+      });
+
+      // 4️⃣ تقليل المخزون Stock
+      const stock = await Stock.findOne({ itemId: item.itemId });
+      if (stock) {
+        stock.quantity -= item.quantity;
+        if (stock.quantity < 0) stock.quantity = 0;
+        await stock.save();
+      }
+    }
+
+    return NextResponse.json(
+      { message: "Order created", orderId: orderHeader._id },
+      { status: 201 }
+    );
+
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+>>>     /src/app/api/orders/[id]/route.ts
+import { NextResponse } from "next/server";
+import {connectDB} from "@/lib/db";
+import InvoiceHeader from "@/models/InvoiceHeader";
+import InvoiceDetails from "@/models/InvoiceDetail";
+import Stock from "@/models/Stock";
+
+// GET Order (with details)
+export async function GET(req: Request, { params }: any) {
+  await connectDB();
+
+  const order = await InvoiceHeader.findById(params.id)
+    .populate("userId")
+    .populate("paymentMethodId")
+    .populate("addressId")
+    .populate("statusId");
+
+  const details = await InvoiceDetails.find({ invoiceId: params.id })
+    .populate("itemId");
+
+  return NextResponse.json({ order, details });
+}
+
+// UPDATE order (status only mostly)
+export async function PUT(req: Request, { params }: any) {
+  try {
+    await connectDB();
+    const body = await req.json();
+
+    const updated = await InvoiceHeader.findByIdAndUpdate(
+      params.id,
+      body,
+      { new: true }
+    );
+
+    return NextResponse.json(updated);
+
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+// DELETE order (Header + Details)
+export async function DELETE(req: Request, { params }: any) {
+  try {
+    await connectDB();
+
+    await InvoiceHeader.findByIdAndDelete(params.id);
+    await InvoiceDetails.deleteMany({ invoiceId: params.id });
+
+    return NextResponse.json({ message: "Order deleted" });
+
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+>>>     /src/app/api/stock/route.ts
+import { NextResponse } from "next/server";
+import Stock from "@/models/Stock";
+import {connectDB} from "@/lib/db";
+
+// GET all stock items
+export async function GET() {
+  await connectDB();
+
+  const stock = await Stock.find()
+    .populate("itemId")
+    .sort({ createdAt: -1 });
+
+  return NextResponse.json(stock);
+}
+
+// CREATE stock record
+export async function POST(req: Request) {
+  try {
+    await connectDB();
+    const body = await req.json();
+
+    // Ensure no duplicate stock per item
+    const exists = await Stock.findOne({ itemId: body.itemId });
+    if (exists) {
+      return NextResponse.json(
+        { message: "Stock for this item already exists" },
+        { status: 400 }
+      );
+    }
+
+    const stock = await Stock.create(body);
+    return NextResponse.json(stock, { status: 201 });
+
+  } catch (err: any) {
+    return NextResponse.json(
+      { message: err.message },
+      { status: 400 }
+    );
+  }
+}
+
+>>>     /src/app/api/stock/[id]/route.ts
+
+import { NextResponse } from "next/server";
+import Stock from "@/models/Stock";
+import {connectDB} from "@/lib/db";
+
+// GET one stock record
+export async function GET(req: Request, { params }: any) {
+  await connectDB();
+  const stock = await Stock.findById(params.id).populate("itemId");
+  return NextResponse.json(stock);
+}
+
+// UPDATE stock record
+export async function PUT(req: Request, { params }: any) {
+  try {
+    await connectDB();
+    const body = await req.json();
+
+    const updated = await Stock.findByIdAndUpdate(params.id, body, {
+      new: true,
+    });
+
+    return NextResponse.json(updated);
+  } catch (err: any) {
+    return NextResponse.json(
+      { message: err.message },
+      { status: 400 }
+    );
+  }
+}
+
+// DELETE stock record
+export async function DELETE(req: Request, { params }: any) {
+  try {
+    await connectDB();
+    await Stock.findByIdAndDelete(params.id);
+
+    return NextResponse.json({ message: "Stock entry deleted" });
+  } catch (err: any) {
+    return NextResponse.json(
+      { message: err.message },
+      { status: 400 }
+    );
+  }
+}
+
+
+>>>     /src/app/api/users/route.ts
+import { NextResponse } from "next/server";
+import User from "@/models/User";
+import {connectDB} from "@/lib/db";
+import bcrypt from "bcryptjs";
+
+// GET all users (admin only - frontend will handle auth later)
+export async function GET() {
+  await connectDB();
+  const users = await User.find().sort({ createdAt: -1 });
+  return NextResponse.json(users);
+}
+
+// REGISTER user
+export async function POST(req: Request) {
+  try {
+    await connectDB();
+    const body = await req.json();
+
+    const { fullName, email, password } = body;
+
+    // check existing email
+    const exists = await User.findOne({ email });
+    if (exists) {
+      return NextResponse.json(
+        { message: "Email already exists" },
+        { status: 400 }
+      );
+    }
+
+    // hash password
+    const hashed = await bcrypt.hash(password, 10);
+    body.password = hashed;
+
+    const newUser = await User.create(body);
+    return NextResponse.json(newUser, { status: 201 });
+
+  } catch (err: any) {
+    return NextResponse.json(
+      { message: err.message },
+      { status: 400 }
+    );
+  }
+}
+
+
+>>>     /src/app/api/users/[id]/route.ts
+import { NextResponse } from "next/server";
+import User from "@/models/User";
+import {connectDB} from "@/lib/db";
+import bcrypt from "bcryptjs";
+
+// GET specific user
+export async function GET(req: Request, { params }: any) {
+  await connectDB();
+  const user = await User.findById(params.id);
+  return NextResponse.json(user);
+}
+
+// UPDATE user
+export async function PUT(req: Request, { params }: any) {
+  try {
+    await connectDB();
+
+    const body = await req.json();
+
+    // If updating password, hash it
+    if (body.password) {
+      body.password = await bcrypt.hash(body.password, 10);
+    }
+
+    const updated = await User.findByIdAndUpdate(params.id, body, {
+      new: true,
+    });
+
+    return NextResponse.json(updated);
+
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+// DELETE user
+export async function DELETE(req: Request, { params }: any) {
+  try {
+    await connectDB();
+    await User.findByIdAndDelete(params.id);
+
+    return NextResponse.json({ message: "User deleted" });
+
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+
+
+>>>     /src/app/api/users/login/route.ts
+import { NextResponse } from "next/server";
+import User from "@/models/User";
+import {connectDB} from "@/lib/db";
+import bcrypt from "bcryptjs";
+
+export async function POST(req: Request) {
+  try {
+    await connectDB();
+    const { email, password } = await req.json();
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return NextResponse.json(
+        { message: "Invalid email or password" },
+        { status: 400 }
+      );
+    }
+
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) {
+      return NextResponse.json(
+        { message: "Invalid email or password" },
+        { status: 400 }
+      );
+    }
+
+    // Token handling will be added later
+    return NextResponse.json({
+      message: "Login successful",
+      user,
+    });
+
+  } catch (err: any) {
+    return NextResponse.json(
+      { message: err.message },
+      { status: 400 }
+    );
+  }
+}
+
+
+
+
+>>>     /src/app/page.tsx
+const page = () => {
+  return (
+    <div>page</div>
+  )
+}
+
+export default page
+
+>>>     /src/app/layout.tsx
+
+export const metadata = {
+  title: "My App",
+  description: "Generated by Next.js",
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en">
+      <body>{children}</body>
+    </html>
+  );
+}
+
+
+-------------------------------------------------------------------------------------------
+
+
+>>>     /src/app/lib/db.ts
+import mongoose from "mongoose";
+
+export const connectDB = async () => {
+  if (mongoose.connection.readyState === 1) return;
+
+  try {
+    await mongoose.connect(process.env.MONGODB_URI!);
+    console.log("MongoDB Connected");
+  } catch (error) {
+    console.error("DB Error:", error);
+  }
+};
+
+
+>>>     /src/app/lib/utils.ts
+empty
+
+-------------------------------------------------------------------------------------------
+
+>>>     /src/app/models/Brand.ts
+import { Schema, model, models } from "mongoose";
+
+const BrandSchema = new Schema(
+  {
+    name: { type: String, required: true, unique: true },
+    logo: { type: String },
+    country: { type: String },
+    isActive: { type: Boolean, default: true },
+  },
+  { timestamps: true }
+);
+
+export default models.Brand || model("Brand", BrandSchema);
+
+
+>>>     /src/app/models/Cart.ts
+import { Schema, model, models } from "mongoose";
+
+const CartSchema = new Schema(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    items: [
+      {
+        itemId: { type: Schema.Types.ObjectId, ref: "Item" },
+        quantity: { type: Number, default: 1 },
+      },
+    ],
+  },
+  { timestamps: true }
+);
+
+export default models.Cart || model("Cart", CartSchema);
+
+
+
+>>>     /src/app/models/InvoiceDetail.ts
+import { Schema, model, models } from "mongoose";
+
+const InvoiceDetailsSchema = new Schema(
+  {
+    invoiceId: {
+      type: Schema.Types.ObjectId,
+      ref: "InvoiceHeader",
+      required: true,
+    },
+    itemId: { type: Schema.Types.ObjectId, ref: "Item", required: true },
+    quantity: { type: Number, required: true },
+    price: { type: Number, required: true },
+    total: { type: Number, required: true },
+  },
+  { timestamps: true }
+);
+
+export default models.InvoiceDetails ||
+  model("InvoiceDetails", InvoiceDetailsSchema);
+
+
+>>>     /src/app/models/InvoiceHeader.ts
+import { Schema, model, models } from "mongoose";
+
+const InvoiceHeaderSchema = new Schema(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    paymentMethodId: {
+      type: Schema.Types.ObjectId,
+      ref: "PaymentMethod",
+      required: true,
+    },
+    addressId: { type: Schema.Types.ObjectId, ref: "UserAddress" },
+    statusId: { type: Schema.Types.ObjectId, ref: "OrderStatus" },
+
+    total: { type: Number, required: true },
+    discount: { type: Number, default: 0 },
+    finalTotal: { type: Number, required: true },
+  },
+  { timestamps: true }
+);
+
+export default models.InvoiceHeader ||
+  model("InvoiceHeader", InvoiceHeaderSchema);
+
+
+
+>>>     /src/app/models/Item.ts
+import { Schema, model, models } from "mongoose";
+import "@/models/ItemType";
+import "@/models/Brand";
+
+const ItemSchema = new Schema(
+  {
+    name: { type: String, required: true },
+    typeId: { type: Schema.Types.ObjectId, ref: "ItemType", required: true },
+    brandId: { type: Schema.Types.ObjectId, ref: "Brand", required: true },
+    description: { type: String },
+    price: { type: Number, required: true },
+    images: [{ type: String }],
+    isActive: { type: Boolean, default: true },
+  },
+  { timestamps: true }
+);
+
+export default models.Item || model("Item", ItemSchema);
+
+
+
+>>>     /src/app/models/ItemType.ts
+import { Schema, model, models } from "mongoose";
+
+const ItemTypeSchema = new Schema(
+  {
+    name: { type: String, required: true, unique: true },
+    description: { type: String },
+    image: { type: String }, 
+    isActive: { type: Boolean, default: true },
+  },
+  { timestamps: true }
+);
+
+const ItemType = models.ItemType || model("ItemType", ItemTypeSchema);
+export default ItemType;
+
+
+>>>     /src/app/models/Notification.ts
+import { Schema, model, models } from "mongoose";
+
+const NotificationSchema = new Schema(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User" },
+    title: { type: String, required: true },
+    message: { type: String, required: true },
+    type: { type: String, enum: ["order", "stock", "system"], default: "system" },
+    isRead: { type: Boolean, default: false },
+  },
+  { timestamps: true }
+);
+
+export default models.Notification ||
+  model("Notification", NotificationSchema);
+
+
+>>>     /src/app/models/OrderStatus.ts
+import { Schema, model, models } from "mongoose";
+
+const OrderStatusSchema = new Schema(
+  {
+    name: { type: String, required: true },
+  },
+  { timestamps: true }
+);
+
+export default models.OrderStatus ||
+  model("OrderStatus", OrderStatusSchema);
+
+
+>>>     /src/app/models/PaymentMethod.ts
+import { Schema, model, models } from "mongoose";
+
+const PaymentMethodSchema = new Schema(
+  {
+    name: { type: String, required: true },
+    type: { type: String, enum: ["cash", "visa", "online"], required: true },
+    isActive: { type: Boolean, default: true },
+  },
+  { timestamps: true }
+);
+
+export default models.PaymentMethod ||
+  model("PaymentMethod", PaymentMethodSchema);
+
+
+
+>>>     /src/app/models/Review.ts
+import { Schema, model, models } from "mongoose";
+
+const ReviewSchema = new Schema(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    itemId: { type: Schema.Types.ObjectId, ref: "Item", required: true },
+    rating: { type: Number, min: 1, max: 5, required: true },
+    comment: { type: String },
+  },
+  { timestamps: true }
+);
+
+export default models.Review || model("Review", ReviewSchema);
+
+
+>>>     /src/app/models/Stock.ts
+import { Schema, model, models } from "mongoose";
+
+const StockSchema = new Schema(
+  {
+    itemId: { type: Schema.Types.ObjectId, ref: "Item", required: true },
+    quantity: { type: Number, required: true, default: 0 },
+    minQuantity: { type: Number, default: 1 },
+    warehouse: { type: String, default: "Main" },
+  },
+  { timestamps: true }
+);
+
+export default models.Stock || model("Stock", StockSchema);
+
+
+>>>     /src/app/models/User.ts
+import { Schema, model, models } from "mongoose";
+
+const UserSchema = new Schema(
+  {
+    fullName: { type: String, required: true },
+    email: { type: String, required: true, unique: true },
+    password: { type: String, required: true }, 
+    phone: { type: String },
+    role: {
+      type: String,
+      enum: ["admin", "customer", "warehouse"],
+      default: "customer",
+    },
+    isActive: { type: Boolean, default: true },
+  },
+  { timestamps: true }
+);
+
+export default models.User || model("User", UserSchema);
+
+
+>>>     /src/app/models/UserAddress.ts
+import { Schema, model, models } from "mongoose";
+
+const UserAddressSchema = new Schema(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    city: { type: String, required: true },
+    area: { type: String },
+    street: { type: String },
+    building: { type: String },
+    floor: { type: String },
+    landmark: { type: String },
+    isDefault: { type: Boolean, default: false },
+  },
+  { timestamps: true }
+);
+
+export default models.UserAddress ||
+  model("UserAddress", UserAddressSchema);
+
+
+
+>>>     /src/app/types/index.d.tsx
+empty
+
+>>>     /src/middleware.ts
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+
+export function middleware(req: NextRequest) {
+  const token = req.cookies.get("token")?.value;
+
+  if (req.nextUrl.pathname.startsWith("/api/admin")) {
+    if (!token) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+  }
+
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: ["/api/:path*"],
+};
