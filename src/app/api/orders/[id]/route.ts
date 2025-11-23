@@ -1,26 +1,29 @@
 import { NextResponse } from "next/server";
-import {connectDB} from "@/lib/db";
+import { connectDB } from "@/lib/db";
 import InvoiceHeader from "@/models/InvoiceHeader";
-import InvoiceDetails from "@/models/InvoiceDetail";
-import Stock from "@/models/Stock";
+import InvoiceDetail from "@/models/InvoiceDetail";
 
-// GET Order (with details)
+// GET order by id
 export async function GET(req: Request, { params }: any) {
   await connectDB();
 
-  const order = await InvoiceHeader.findById(params.id)
-    .populate("userId")
+  const header = await InvoiceHeader.findById(params.id)
+    .populate("userId", "name email")
     .populate("paymentMethodId")
-    .populate("addressId")
-    .populate("statusId");
+    .populate("statusId")
+    .populate("addressId");
 
-  const details = await InvoiceDetails.find({ invoiceId: params.id })
-    .populate("itemId");
+  const details = await InvoiceDetail.find({ invoiceId: params.id }).populate(
+    "itemId"
+  );
 
-  return NextResponse.json({ order, details });
+  return NextResponse.json({
+    header,
+    details,
+  });
 }
 
-// UPDATE order (status only mostly)
+// UPDATE order status
 export async function PUT(req: Request, { params }: any) {
   try {
     await connectDB();
@@ -28,27 +31,25 @@ export async function PUT(req: Request, { params }: any) {
 
     const updated = await InvoiceHeader.findByIdAndUpdate(
       params.id,
-      body,
+      { statusId: body.statusId },
       { new: true }
     );
 
     return NextResponse.json(updated);
-
   } catch (err: any) {
     return NextResponse.json({ message: err.message }, { status: 400 });
   }
 }
 
-// DELETE order (Header + Details)
+// DELETE order
 export async function DELETE(req: Request, { params }: any) {
   try {
     await connectDB();
 
     await InvoiceHeader.findByIdAndDelete(params.id);
-    await InvoiceDetails.deleteMany({ invoiceId: params.id });
+    await InvoiceDetail.deleteMany({ invoiceId: params.id });
 
     return NextResponse.json({ message: "Order deleted" });
-
   } catch (err: any) {
     return NextResponse.json({ message: err.message }, { status: 400 });
   }
