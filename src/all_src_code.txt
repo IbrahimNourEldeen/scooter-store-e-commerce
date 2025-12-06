@@ -1,0 +1,2062 @@
+﻿
+/* FILE: D:\nextjs\scooter-store\src\app\api\brands\[id]\route.ts */
+import { NextResponse } from "next/server";
+import Brand from "@/models/Brand";
+import {connectDB} from "@/lib/db";
+
+// GET one brand
+export async function GET(req: Request, { params }: any) {
+  await connectDB();
+  const brand = await Brand.findById(params.id);
+  return NextResponse.json(brand);
+}
+
+// UPDATE brand
+export async function PUT(req: Request, { params }: any) {
+  try {
+    await connectDB();
+    const body = await req.json();
+
+    const updated = await Brand.findByIdAndUpdate(params.id, body, {
+      new: true,
+    });
+
+    return NextResponse.json(updated);
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+// DELETE brand
+export async function DELETE(req: Request, { params }: any) {
+  try {
+    await connectDB();
+
+    await Brand.findByIdAndDelete(params.id);
+    return NextResponse.json({ message: "Brand deleted" });
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\brands\route.ts */
+import { NextResponse } from "next/server";
+import Brand from "@/models/Brand";
+import {connectDB} from "@/lib/db";
+
+// GET all brands
+export async function GET() {
+  await connectDB();
+  const brands = await Brand.find().sort({ createdAt: -1 });
+  return NextResponse.json(brands);
+}
+
+// CREATE brand
+export async function POST(req: Request) {
+  try {
+    await connectDB();
+    const body = await req.json();
+
+    const brand = await Brand.create(body);
+    return NextResponse.json(brand, { status: 201 });
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\cart\[itemId]\route.ts */
+import { NextResponse } from "next/server";
+import { connectDB } from "@/lib/db";
+import Cart from "@/models/Cart";
+
+// UPDATE quantity of specific item
+export async function PUT(req: Request, { params }: any) {
+  try {
+    await connectDB();
+    const { userId, quantity } = await req.json();
+
+    if (!userId || !quantity) {
+      return NextResponse.json(
+        { message: "userId and quantity are required" },
+        { status: 400 }
+      );
+    }
+
+    const cart = await Cart.findOne({ userId });
+    if (!cart)
+      return NextResponse.json({ message: "Cart not found" }, { status: 404 });
+
+    const item = cart.items.find(
+      (i: any) => i.itemId.toString() === params.itemId
+    );
+
+    if (!item)
+      return NextResponse.json({ message: "Item not found in cart" }, { status: 404 });
+
+    item.quantity = quantity;
+
+    await cart.save();
+    return NextResponse.json(cart);
+
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+// REMOVE item from cart
+export async function DELETE(req: Request, { params }: any) {
+  try {
+    await connectDB();
+
+    const url = new URL(req.url);
+    const userId = url.searchParams.get("userId");
+
+    if (!userId) {
+      return NextResponse.json(
+        { message: "userId is required" },
+        { status: 400 }
+      );
+    }
+
+    const cart = await Cart.findOne({ userId });
+    if (!cart)
+      return NextResponse.json({ message: "Cart not found" }, { status: 404 });
+
+    cart.items = cart.items.filter(
+      (i: any) => i.itemId.toString() !== params.itemId
+    );
+
+    await cart.save();
+
+    return NextResponse.json({ message: "Item removed", cart });
+
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\cart\clear\route.ts */
+import { NextResponse } from "next/server";
+import { connectDB } from "@/lib/db";
+import Cart from "@/models/Cart";
+
+export async function DELETE(req: Request) {
+  try {
+    await connectDB();
+    const url = new URL(req.url);
+    const userId = url.searchParams.get("userId");
+
+    if (!userId) {
+      return NextResponse.json(
+        { message: "userId is required" },
+        { status: 400 }
+      );
+    }
+
+    const cart = await Cart.findOne({ userId });
+
+    if (!cart)
+      return NextResponse.json({ message: "Cart not found" }, { status: 404 });
+
+    cart.items = [];
+    await cart.save();
+
+    return NextResponse.json({ message: "Cart cleared" });
+
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\cart\route.ts */
+import { NextResponse } from "next/server";
+import { connectDB } from "@/lib/db";
+import Cart from "@/models/Cart";
+
+// GET cart for specific user
+export async function GET(req: Request) {
+  await connectDB();
+
+  const url = new URL(req.url);
+  const userId = url.searchParams.get("userId");
+
+  if (!userId) {
+    return NextResponse.json(
+      { message: "userId is required" },
+      { status: 400 }
+    );
+  }
+
+  let cart = await Cart.findOne({ userId }).populate("items.itemId");
+
+  // return empty cart if not found
+  if (!cart) {
+    cart = await Cart.create({ userId, items: [] });
+  }
+
+  return NextResponse.json(cart);
+}
+
+// ADD item to cart
+export async function POST(req: Request) {
+  try {
+    await connectDB();
+
+    const { userId, itemId, quantity = 1 } = await req.json();
+
+    if (!userId || !itemId) {
+      return NextResponse.json(
+        { message: "userId and itemId are required" },
+        { status: 400 }
+      );
+    }
+
+    let cart = await Cart.findOne({ userId });
+
+    // If no cart â†’ create new
+    if (!cart) {
+      cart = await Cart.create({
+        userId,
+        items: [{ itemId, quantity }],
+      });
+
+      return NextResponse.json(cart, { status: 201 });
+    }
+
+    // If item exists â†’ increase quantity
+    const existingItem = cart.items.find(
+      (i: any) => i.itemId.toString() === itemId
+    );
+
+    if (existingItem) {
+      existingItem.quantity += quantity;
+    } else {
+      cart.items.push({ itemId, quantity });
+    }
+
+    await cart.save();
+    return NextResponse.json(cart);
+
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\coupons\[id]\route.ts */
+import { NextResponse } from "next/server";
+import { connectDB } from "@/lib/db";
+import Coupon from "@/models/Coupon";
+
+// GET one
+export async function GET(req: Request, { params }: any) {
+  await connectDB();
+  const coupon = await Coupon.findById(params.id);
+  return NextResponse.json(coupon);
+}
+
+// UPDATE
+export async function PUT(req: Request, { params }: any) {
+  try {
+    await connectDB();
+    const body = await req.json();
+
+    const updated = await Coupon.findByIdAndUpdate(
+      params.id,
+      body,
+      { new: true }
+    );
+
+    return NextResponse.json(updated);
+
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+// DELETE
+export async function DELETE(req: Request, { params }: any) {
+  try {
+    await connectDB();
+    await Coupon.findByIdAndDelete(params.id);
+    return NextResponse.json({ message: "Coupon deleted" });
+
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\coupons\route.ts */
+import { NextResponse } from "next/server";
+import { connectDB } from "@/lib/db";
+import Coupon from "@/models/Coupon";
+
+// GET All
+export async function GET() {
+  await connectDB();
+  const coupons = await Coupon.find().sort({ createdAt: -1 });
+  return NextResponse.json(coupons);
+}
+
+// CREATE
+export async function POST(req: Request) {
+  try {
+    await connectDB();
+    const body = await req.json();
+
+    const coupon = await Coupon.create(body);
+    return NextResponse.json(coupon, { status: 201 });
+
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\dashboard\route.ts */
+import { NextResponse } from 'next/server';
+import dbConnect from '@/lib/db';
+import User from '@/models/User';
+import InvoiceHeader from '@/models/InvoiceHeader';
+import InvoiceDetail from '@/models/InvoiceDetail';
+import Stock from '@/models/Stock';
+import Item from '@/models/Item';
+import Notification from '@/models/Notification';
+
+export async function GET() {
+  await dbConnect();
+
+  const totalUsers = await User.countDocuments();
+  const totalOrders = await InvoiceHeader.countDocuments();
+  const totalSalesAgg = await InvoiceHeader.aggregate([
+    { $group: { _id: null, total: { $sum: "$total_amount" } } }
+  ]);
+  const totalSales = totalSalesAgg[0]?.total || 0;
+
+  const stockStats = await Stock.aggregate([
+    { $group: { _id: "$item_id", qty: { $sum: "$quantity" } } },
+    { $sort: { qty: 1 } }
+  ]);
+
+  const lowestStockItem = await Item.findById(stockStats[0]?._id);
+  const highestStockItem = await Item.findById(stockStats[stockStats.length - 1]?._id);
+
+  const topSellingAgg = await InvoiceDetail.aggregate([
+    { $group: { _id: "$item_id", totalQty: { $sum: "$quantity" } } },
+    { $sort: { totalQty: -1 } },
+    { $limit: 5 }
+  ]);
+
+  const topSellingItems = await Item.find({ _id: { $in: topSellingAgg.map(i => i._id) } });
+
+  const notificationsCount = await Notification.countDocuments();
+
+  return NextResponse.json({
+    totalUsers,
+    totalOrders,
+    totalSales,
+    lowestStockItem,
+    highestStockItem,
+    topSellingItems,
+    notificationsCount
+  });
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\invoices\route.ts */
+import { NextRequest, NextResponse } from 'next/server';
+import InvoiceHeader from '@/models/InvoiceHeader';
+import InvoiceDetail from '@/models/InvoiceDetail';
+import dbConnect from '@/lib/db';
+
+export async function GET() {
+  await dbConnect();
+  const headers = await InvoiceHeader.find().lean();
+  const details = await InvoiceDetail.find().lean();
+  return NextResponse.json({ headers, details });
+}
+
+export async function POST(req: NextRequest) {
+  await dbConnect();
+  const data = await req.json();
+
+  // data expected: { header: {...}, details: [...] }
+  const header = await InvoiceHeader.create(data.header);
+  const details = await InvoiceDetail.insertMany(
+    data.details.map(d => ({ ...d, invoice_id: header._id }))
+  );
+
+  return NextResponse.json({ header, details });
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\items\[id]\route.ts */
+import { NextResponse } from "next/server";
+import Item from "@/models/Item";
+import {connectDB} from "@/lib/db";
+
+// GET one item
+export async function GET(req: Request, { params }: any) {
+  await connectDB();
+  const item = await Item.findById(params.id)
+    .populate("typeId")
+    .populate("brandId");
+
+  return NextResponse.json(item);
+}
+
+// UPDATE item
+export async function PUT(req: Request, { params }: any) {
+  try {
+    await connectDB();
+    const body = await req.json();
+
+    const updated = await Item.findByIdAndUpdate(params.id, body, {
+      new: true,
+    });
+
+    return NextResponse.json(updated);
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+// DELETE item
+export async function DELETE(req: Request, { params }: any) {
+  try {
+    await connectDB();
+
+    await Item.findByIdAndDelete(params.id);
+    return NextResponse.json({ message: "Item deleted" });
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\items\route.ts */
+import { NextResponse } from "next/server";
+import Item from "@/models/Item";
+import {connectDB} from "@/lib/db";
+
+// GET all items
+export async function GET(req: Request) {
+  await connectDB();
+
+  const url = new URL(req.url);
+  const type = url.searchParams.get("type");
+  const brand = url.searchParams.get("brand");
+  const search = url.searchParams.get("search");
+
+  // building dynamic filter
+  let filter: any = {};
+  if (type) filter.typeId = type;
+  if (brand) filter.brandId = brand;
+  if (search) filter.name = { $regex: search, $options: "i" };
+
+  const items = await Item.find(filter)
+    .populate("typeId")
+    .populate("brandId")
+    .sort({ createdAt: -1 });
+
+  return NextResponse.json(items);
+}
+
+// CREATE item
+export async function POST(req: Request) {
+  try {
+    await connectDB();
+    const body = await req.json();
+
+    const item = await Item.create(body);
+    return NextResponse.json(item, { status: 201 });
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\item-types\[id]\route.ts */
+import { NextResponse } from "next/server";
+import ItemType from "@/models/ItemType";
+import {connectDB} from "@/lib/db";
+
+// GET specific type
+export async function GET(req: Request, { params }: any) {
+  await connectDB();
+  const type = await ItemType.findById(params.id);
+  return NextResponse.json(type);
+}
+
+// UPDATE item type
+export async function PUT(req: Request, { params }: any) {
+  try {
+    await connectDB();
+    const body = await req.json();
+
+    const updated = await ItemType.findByIdAndUpdate(params.id, body, {
+      new: true,
+    });
+
+    return NextResponse.json(updated);
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+// DELETE item type
+export async function DELETE(req: Request, { params }: any) {
+  try {
+    await connectDB();
+
+    await ItemType.findByIdAndDelete(params.id);
+    return NextResponse.json({ message: "Deleted" });
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\item-types\route.ts */
+import { NextResponse } from "next/server";
+import ItemType from "@/models/ItemType";
+import {connectDB} from "@/lib/db";
+
+// GET all item types
+export async function GET() {
+  await connectDB();
+  const types = await ItemType.find().sort({ createdAt: -1 });
+  return NextResponse.json(types);
+}
+
+// CREATE item type
+export async function POST(req: Request) {
+  try {
+    await connectDB();
+    const body = await req.json();
+
+    const newType = await ItemType.create(body);
+    return NextResponse.json(newType, { status: 201 });
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\notifications\[id]\route.ts */
+import { NextResponse } from "next/server";
+import { connectDB } from "@/lib/db";
+import Notification from "@/models/Notification";
+
+// GET one
+export async function GET(req: Request, { params }: any) {
+  await connectDB();
+  const noti = await Notification.findById(params.id);
+  return NextResponse.json(noti);
+}
+
+// UPDATE (mark read)
+export async function PUT(req: Request, { params }: any) {
+  try {
+    await connectDB();
+    const body = await req.json();
+
+    const updated = await Notification.findByIdAndUpdate(
+      params.id,
+      body,
+      { new: true }
+    );
+
+    return NextResponse.json(updated);
+
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+// DELETE
+export async function DELETE(req: Request, { params }: any) {
+  try {
+    await connectDB();
+    await Notification.findByIdAndDelete(params.id);
+    return NextResponse.json({ message: "Notification deleted" });
+
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\notifications\route.ts */
+import { NextResponse } from "next/server";
+import { connectDB } from "@/lib/db";
+import Notification from "@/models/Notification";
+
+// GET all notifications
+export async function GET() {
+  await connectDB();
+  const notifications = await Notification.find()
+    .populate("userId")
+    .sort({ createdAt: -1 });
+
+  return NextResponse.json(notifications);
+}
+
+// CREATE notification
+export async function POST(req: Request) {
+  try {
+    await connectDB();
+    const body = await req.json();
+
+    const noti = await Notification.create(body);
+    return NextResponse.json(noti, { status: 201 });
+
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\orders\[id]\route.ts */
+import { NextResponse } from "next/server";
+import { connectDB } from "@/lib/db";
+import InvoiceHeader from "@/models/InvoiceHeader";
+import InvoiceDetail from "@/models/InvoiceDetail";
+
+// GET order by id
+export async function GET(req: Request, { params }: any) {
+  await connectDB();
+
+  const header = await InvoiceHeader.findById(params.id)
+    .populate("userId", "name email")
+    .populate("paymentMethodId")
+    .populate("statusId")
+    .populate("addressId");
+
+  const details = await InvoiceDetail.find({ invoiceId: params.id }).populate(
+    "itemId"
+  );
+
+  return NextResponse.json({
+    header,
+    details,
+  });
+}
+
+// UPDATE order status
+export async function PUT(req: Request, { params }: any) {
+  try {
+    await connectDB();
+    const body = await req.json();
+
+    const updated = await InvoiceHeader.findByIdAndUpdate(
+      params.id,
+      { statusId: body.statusId },
+      { new: true }
+    );
+
+    return NextResponse.json(updated);
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+// DELETE order
+export async function DELETE(req: Request, { params }: any) {
+  try {
+    await connectDB();
+
+    await InvoiceHeader.findByIdAndDelete(params.id);
+    await InvoiceDetail.deleteMany({ invoiceId: params.id });
+
+    return NextResponse.json({ message: "Order deleted" });
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\orders\route.ts */
+import { NextResponse } from "next/server";
+import mongoose from "mongoose";
+import { connectDB } from "@/lib/db";
+import Cart from "@/models/Cart";
+import Stock from "@/models/Stock";
+import InvoiceHeader from "@/models/InvoiceHeader";
+import InvoiceDetail from "@/models/InvoiceDetail";
+
+export async function POST(req: Request) {
+  await connectDB();
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { userId, paymentMethodId, addressId, discount = 0 } = await req.json();
+
+    // 1ï¸ڈâƒ£ ط¬ظ„ط¨ Cart
+    const cart = await Cart.findOne({ userId }).session(session);
+    if (!cart || cart.items.length === 0) {
+      return NextResponse.json({ message: "Cart is empty" }, { status: 400 });
+    }
+
+    let total = 0;
+
+    // 2ï¸ڈâƒ£ طھط­ظ‚ظ‚ ظ…ظ† stock ظ„ظƒظ„ ط¹ظ†طµط±
+    for (const cartItem of cart.items) {
+      const stock = await Stock.findOne({ itemId: cartItem.itemId }).session(session);
+      if (!stock) throw new Error("Stock record not found for item");
+      if (stock.quantity < cartItem.quantity) throw new Error(`Not enough stock for item`);
+
+      total += cartItem.quantity * stock.itemId.price; // assuming price in Item model
+    }
+
+    const finalTotal = total - discount;
+
+    // 3ï¸ڈâƒ£ ط¥ظ†ط´ط§ط، InvoiceHeader
+    const invoiceHeader = await InvoiceHeader.create(
+      [{ userId, paymentMethodId, addressId, total, discount, finalTotal }],
+      { session }
+    );
+    const invoiceId = invoiceHeader[0]._id;
+
+    // 4ï¸ڈâƒ£ ط¥ظ†ط´ط§ط، InvoiceDetails + طھط­ط¯ظٹط« stock + stock transaction
+    for (const cartItem of cart.items) {
+      const stock = await Stock.findOne({ itemId: cartItem.itemId }).session(session);
+
+      await InvoiceDetail.create(
+        [
+          {
+            invoiceId,
+            itemId: cartItem.itemId,
+            quantity: cartItem.quantity,
+            price: stock.itemId.price,
+            total: stock.itemId.price * cartItem.quantity,
+          },
+        ],
+        { session }
+      );
+
+      stock.quantity -= cartItem.quantity;
+      await stock.save({ session });
+    }
+
+    // 5ï¸ڈâƒ£ ظ…ط³ط­ cart
+    cart.items = [];
+    await cart.save({ session });
+
+    // 6ï¸ڈâƒ£ commit transaction
+    await session.commitTransaction();
+    session.endSession();
+
+    return NextResponse.json({ message: "Order completed", invoiceId }, { status: 201 });
+
+  } catch (err: any) {
+    await session.abortTransaction();
+    session.endSession();
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\order-status\[id]\route.ts */
+import { NextResponse } from "next/server";
+import { connectDB } from "@/lib/db";
+import OrderStatus from "@/models/OrderStatus";
+
+// GET single status
+export async function GET(req: Request, { params }: any) {
+  await connectDB();
+
+  const status = await OrderStatus.findById(params.id);
+  return NextResponse.json(status);
+}
+
+// UPDATE status
+export async function PUT(req: Request, { params }: any) {
+  try {
+    await connectDB();
+    const body = await req.json();
+
+    const updated = await OrderStatus.findByIdAndUpdate(
+      params.id,
+      body,
+      { new: true }
+    );
+
+    return NextResponse.json(updated);
+    
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+// DELETE status
+export async function DELETE(req: Request, { params }: any) {
+  try {
+    await connectDB();
+
+    await OrderStatus.findByIdAndDelete(params.id);
+    return NextResponse.json({ message: "Status deleted" });
+
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\order-status\route.ts */
+import { NextResponse } from "next/server";
+import { connectDB } from "@/lib/db";
+import OrderStatus from "@/models/OrderStatus";
+
+// GET all order statuses
+export async function GET() {
+  await connectDB();
+
+  const statuses = await OrderStatus.find().sort({ createdAt: -1 });
+  return NextResponse.json(statuses);
+}
+
+// CREATE new status
+export async function POST(req: Request) {
+  try {
+    await connectDB();
+    const body = await req.json();
+
+    const status = await OrderStatus.create(body);
+    return NextResponse.json(status, { status: 201 });
+
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\payment-methods\[id]\route.ts */
+import { NextResponse } from "next/server";
+import { connectDB } from "@/lib/db";
+import PaymentMethod from "@/models/PaymentMethod";
+
+// GET one payment method
+export async function GET(req: Request, { params }: any) {
+  await connectDB();
+  const method = await PaymentMethod.findById(params.id);
+  return NextResponse.json(method);
+}
+
+// UPDATE payment method
+export async function PUT(req: Request, { params }: any) {
+  try {
+    await connectDB();
+    const body = await req.json();
+
+    const updated = await PaymentMethod.findByIdAndUpdate(
+      params.id,
+      body,
+      { new: true }
+    );
+
+    return NextResponse.json(updated);
+
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+// DELETE payment method
+export async function DELETE(req: Request, { params }: any) {
+  try {
+    await connectDB();
+    await PaymentMethod.findByIdAndDelete(params.id);
+    return NextResponse.json({ message: "Payment method deleted" });
+
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\payment-methods\route.ts */
+import { NextResponse } from "next/server";
+import { connectDB } from "@/lib/db";
+import PaymentMethod from "@/models/PaymentMethod";
+
+// GET all payment methods
+export async function GET() {
+  await connectDB();
+  const methods = await PaymentMethod.find().sort({ createdAt: -1 });
+  return NextResponse.json(methods);
+}
+
+// CREATE payment method
+export async function POST(req: Request) {
+  try {
+    await connectDB();
+    const body = await req.json();
+
+    const method = await PaymentMethod.create(body);
+    return NextResponse.json(method, { status: 201 });
+
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\reviews\[id]\route.ts */
+import { NextResponse } from "next/server";
+import { connectDB } from "@/lib/db";
+import Review from "@/models/Review";
+
+
+// GET single review
+export async function GET(req: Request, { params }: any) {
+  await connectDB();
+
+  const review = await Review.findById(params.id).populate(
+    "userId",
+    "name email"
+  );
+
+  return NextResponse.json(review);
+}
+
+
+// UPDATE review
+export async function PUT(req: Request, { params }: any) {
+  try {
+    await connectDB();
+
+    const body = await req.json();
+
+    const updated = await Review.findByIdAndUpdate(
+      params.id,
+      body,
+      { new: true }
+    );
+
+    return NextResponse.json(updated);
+
+  } catch (err: any) {
+    return NextResponse.json(
+      { message: err.message },
+      { status: 400 }
+    );
+  }
+}
+
+
+// DELETE review
+export async function DELETE(req: Request, { params }: any) {
+  try {
+    await connectDB();
+
+    await Review.findByIdAndDelete(params.id);
+
+    return NextResponse.json({ message: "Review deleted" });
+
+  } catch (err: any) {
+    return NextResponse.json(
+      { message: err.message },
+      { status: 400 }
+    );
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\reviews\route.ts */
+import { NextResponse } from "next/server";
+import { connectDB } from "@/lib/db";
+import Review from "@/models/Review";
+
+
+// GET reviews by itemId
+export async function GET(req: Request) {
+  await connectDB();
+
+  const url = new URL(req.url);
+  const itemId = url.searchParams.get("itemId");
+
+  if (!itemId) {
+    return NextResponse.json(
+      { message: "itemId is required" },
+      { status: 400 }
+    );
+  }
+
+  const reviews = await Review.find({ itemId })
+    .populate("userId", "name email")
+    .sort({ createdAt: -1 });
+
+  return NextResponse.json(reviews);
+}
+
+
+// CREATE review
+export async function POST(req: Request) {
+  try {
+    await connectDB();
+
+    const body = await req.json();
+
+    const review = await Review.create(body);
+
+    return NextResponse.json(review, { status: 201 });
+
+  } catch (err: any) {
+    return NextResponse.json(
+      { message: err.message },
+      { status: 400 }
+    );
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\search\route.ts */
+import { NextResponse } from "next/server";
+import { connectDB } from "@/lib/db";
+import Item from "@/models/Item";
+
+export async function POST(req: Request) {
+  try {
+    await connectDB();
+
+    const { query, brand_id, type_id, min_price, max_price } = await req.json();
+
+    // Build filters dynamically
+    const filters: any = {};
+
+    // Keyword search
+    if (query) {
+      filters.name = { $regex: query, $options: "i" };
+    }
+
+    // Filter by brand
+    if (brand_id && brand_id !== "all") {
+      filters.brandId = brand_id;
+    }
+
+    // Filter by type
+    if (type_id && type_id !== "all") {
+      filters.typeId = type_id;
+    }
+
+    // Price range
+    if (min_price || max_price) {
+      filters.price = {};
+      if (min_price) filters.price.$gte = Number(min_price);
+      if (max_price) filters.price.$lte = Number(max_price);
+    }
+
+    const items = await Item.find(filters)
+      .populate("brandId")
+      .populate("typeId")
+      .sort({ createdAt: -1 });
+
+    return NextResponse.json({
+      total: items.length,
+      items,
+    });
+
+  } catch (error: any) {
+    return NextResponse.json(
+      { message: error.message },
+      { status: 500 }
+    );
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\stock\[id]\route.ts */
+import { NextResponse } from "next/server";
+import Stock from "@/models/Stock";
+import {connectDB} from "@/lib/db";
+
+// GET one stock record
+export async function GET(req: Request, { params }: any) {
+  await connectDB();
+  const stock = await Stock.findById(params.id).populate("itemId");
+  return NextResponse.json(stock);
+}
+
+// UPDATE stock record
+export async function PUT(req: Request, { params }: any) {
+  try {
+    await connectDB();
+    const body = await req.json();
+
+    const updated = await Stock.findByIdAndUpdate(params.id, body, {
+      new: true,
+    });
+
+    return NextResponse.json(updated);
+  } catch (err: any) {
+    return NextResponse.json(
+      { message: err.message },
+      { status: 400 }
+    );
+  }
+}
+
+// DELETE stock record
+export async function DELETE(req: Request, { params }: any) {
+  try {
+    await connectDB();
+    await Stock.findByIdAndDelete(params.id);
+
+    return NextResponse.json({ message: "Stock entry deleted" });
+  } catch (err: any) {
+    return NextResponse.json(
+      { message: err.message },
+      { status: 400 }
+    );
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\stock\route.ts */
+import { NextResponse } from "next/server";
+import Stock from "@/models/Stock";
+import {connectDB} from "@/lib/db";
+
+// GET all stock items
+export async function GET() {
+  await connectDB();
+
+  const stock = await Stock.find()
+    .populate("itemId")
+    .sort({ createdAt: -1 });
+
+  return NextResponse.json(stock);
+}
+
+// CREATE stock record
+export async function POST(req: Request) {
+  try {
+    await connectDB();
+    const body = await req.json();
+
+    // Ensure no duplicate stock per item
+    const exists = await Stock.findOne({ itemId: body.itemId });
+    if (exists) {
+      return NextResponse.json(
+        { message: "Stock for this item already exists" },
+        { status: 400 }
+      );
+    }
+
+    const stock = await Stock.create(body);
+    return NextResponse.json(stock, { status: 201 });
+
+  } catch (err: any) {
+    return NextResponse.json(
+      { message: err.message },
+      { status: 400 }
+    );
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\stock-transactions\[id]\route.ts */
+import { NextResponse } from "next/server";
+import { connectDB } from "@/lib/db";
+import StockTransaction from "@/models/StockTransaction";
+
+
+// GET single transaction
+export async function GET(req: Request, { params }: any) {
+  await connectDB();
+
+  const transaction = await StockTransaction.findById(params.id)
+    .populate("itemId")
+    .populate("userId", "name");
+
+  return NextResponse.json(transaction);
+}
+
+
+// UPDATE transaction
+export async function PUT(req: Request, { params }: any) {
+  try {
+    await connectDB();
+    const body = await req.json();
+
+    const updated = await StockTransaction.findByIdAndUpdate(
+      params.id,
+      body,
+      { new: true }
+    );
+
+    return NextResponse.json(updated);
+
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+
+// DELETE transaction
+export async function DELETE(req: Request, { params }: any) {
+  try {
+    await connectDB();
+
+    await StockTransaction.findByIdAndDelete(params.id);
+
+    return NextResponse.json({ message: "Transaction deleted" });
+
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\stock-transactions\route.ts */
+import { NextResponse } from "next/server";
+import { connectDB } from "@/lib/db";
+import StockTransaction from "@/models/StockTransaction";
+
+// GET stock transactions
+export async function GET(req: Request) {
+  await connectDB();
+
+  const url = new URL(req.url);
+  const itemId = url.searchParams.get("itemId");
+  const movementType = url.searchParams.get("movementType");
+
+  let filter: any = {};
+
+  if (itemId) filter.itemId = itemId;
+  if (movementType) filter.movementType = movementType;
+
+  const transactions = await StockTransaction.find(filter)
+    .populate("itemId")
+    .populate("userId", "name")
+    .sort({ createdAt: -1 });
+
+  return NextResponse.json(transactions);
+}
+
+
+// CREATE stock transaction
+export async function POST(req: Request) {
+  try {
+    await connectDB();
+
+    const body = await req.json();
+
+    const transaction = await StockTransaction.create(body);
+
+    return NextResponse.json(transaction, { status: 201 });
+
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\user-address\[id]\route.ts */
+import { NextResponse } from "next/server";
+import { connectDB } from "@/lib/db";
+import UserAddress from "@/models/UserAddress";
+
+// GET single address
+export async function GET(req: Request, { params }: any) {
+  await connectDB();
+
+  const address = await UserAddress.findById(params.id);
+  return NextResponse.json(address);
+}
+
+// UPDATE address
+export async function PUT(req: Request, { params }: any) {
+  try {
+    await connectDB();
+    const body = await req.json();
+
+    const updated = await UserAddress.findByIdAndUpdate(
+      params.id,
+      body,
+      { new: true }
+    );
+
+    // If changed to default â†’ turn off default for others
+    if (body.isDefault === true) {
+      await UserAddress.updateMany(
+        { userId: updated.userId, _id: { $ne: updated._id } },
+        { isDefault: false }
+      );
+    }
+
+    return NextResponse.json(updated);
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+// DELETE address
+export async function DELETE(req: Request, { params }: any) {
+  try {
+    await connectDB();
+
+    await UserAddress.findByIdAndDelete(params.id);
+
+    return NextResponse.json({ message: "Address deleted" });
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\user-address\route.ts */
+import { NextResponse } from "next/server";
+import { connectDB } from "@/lib/db";
+import UserAddress from "@/models/UserAddress";
+
+// GET all addresses for user
+export async function GET(req: Request) {
+  await connectDB();
+
+  const url = new URL(req.url);
+  const userId = url.searchParams.get("userId");
+
+  if (!userId) {
+    return NextResponse.json(
+      { message: "userId is required" },
+      { status: 400 }
+    );
+  }
+
+  const addresses = await UserAddress.find({ userId }).sort({
+    createdAt: -1,
+  });
+
+  return NextResponse.json(addresses);
+}
+
+// CREATE new address
+export async function POST(req: Request) {
+  try {
+    await connectDB();
+    const body = await req.json();
+
+    const address = await UserAddress.create(body);
+
+    // If this isDefault = true, reset others
+    if (address.isDefault) {
+      await UserAddress.updateMany(
+        { userId: address.userId, _id: { $ne: address._id } },
+        { isDefault: false }
+      );
+    }
+
+    return NextResponse.json(address, { status: 201 });
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\users\[id]\route.ts */
+import { NextResponse } from "next/server";
+import User from "@/models/User";
+import {connectDB} from "@/lib/db";
+import bcrypt from "bcryptjs";
+
+// GET specific user
+export async function GET(req: Request, { params }: any) {
+  await connectDB();
+  const user = await User.findById(params.id);
+  return NextResponse.json(user);
+}
+
+// UPDATE user
+export async function PUT(req: Request, { params }: any) {
+  try {
+    await connectDB();
+
+    const body = await req.json();
+
+    // If updating password, hash it
+    if (body.password) {
+      body.password = await bcrypt.hash(body.password, 10);
+    }
+
+    const updated = await User.findByIdAndUpdate(params.id, body, {
+      new: true,
+    });
+
+    return NextResponse.json(updated);
+
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+// DELETE user
+export async function DELETE(req: Request, { params }: any) {
+  try {
+    await connectDB();
+    await User.findByIdAndDelete(params.id);
+
+    return NextResponse.json({ message: "User deleted" });
+
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\users\login\route.ts */
+import { NextResponse } from "next/server";
+import User from "@/models/User";
+import { connectDB } from "@/lib/db";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+
+export async function POST(req: Request) {
+  try {
+    await connectDB();
+
+    const { email, password } = await req.json();
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return NextResponse.json(
+        { message: "Invalid email or password" },
+        { status: 400 }
+      );
+    }
+
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) {
+      return NextResponse.json(
+        { message: "Invalid email or password" },
+        { status: 400 }
+      );
+    }
+
+    // Generate JWT
+    const token = jwt.sign(
+      {
+        id: user._id,
+        fullName: user.fullName,
+        role: user.role,
+      },
+      process.env.JWT_SECRET!,
+      { expiresIn: "7d" }
+    );
+
+    return NextResponse.json({
+      message: "Login successful",
+      token,
+      user,
+    });
+
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\users\route.ts */
+import { NextResponse } from "next/server";
+import User from "@/models/User";
+import {connectDB} from "@/lib/db";
+import bcrypt from "bcryptjs";
+
+// GET all users (admin only - frontend will handle auth later)
+export async function GET() {
+  await connectDB();
+  const users = await User.find().sort({ createdAt: -1 });
+  return NextResponse.json(users);
+}
+
+// REGISTER user
+export async function POST(req: Request) {
+  try {
+    await connectDB();
+    const body = await req.json();
+
+    const { fullName, email, password } = body;
+
+    // check existing email
+    const exists = await User.findOne({ email });
+    if (exists) {
+      return NextResponse.json(
+        { message: "Email already exists" },
+        { status: 400 }
+      );
+    }
+
+    // hash password
+    const hashed = await bcrypt.hash(password, 10);
+    body.password = hashed;
+
+    const newUser = await User.create(body);
+    return NextResponse.json(newUser, { status: 201 });
+
+  } catch (err: any) {
+    return NextResponse.json(
+      { message: err.message },
+      { status: 400 }
+    );
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\wishlist\[id]\route.ts */
+import { NextResponse } from "next/server";
+import { connectDB } from "@/lib/db";
+import Wishlist from "@/models/Wishlist";
+
+// DELETE item from wishlist
+export async function DELETE(req: Request, { params }: any) {
+  try {
+    await connectDB();
+
+    const itemId = params.id;
+    const { searchParams } = new URL(req.url);
+    const userId = searchParams.get("userId");
+
+    if (!userId) {
+      return NextResponse.json({ message: "userId is required" }, { status: 400 });
+    }
+
+    const wishlist = await Wishlist.findOne({ userId });
+
+    if (!wishlist) {
+      return NextResponse.json({ message: "Wishlist not found" }, { status: 404 });
+    }
+
+    wishlist.items = wishlist.items.filter(
+      (id: any) => id.toString() !== itemId
+    );
+
+    await wishlist.save();
+
+    return NextResponse.json(wishlist);
+
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\api\wishlist\route.ts */
+import { NextResponse } from "next/server";
+import { connectDB } from "@/lib/db";
+import Wishlist from "@/models/Wishlist";
+
+// GET wishlist by userId ?userId=
+export async function GET(req: Request) {
+  await connectDB();
+
+  const { searchParams } = new URL(req.url);
+  const userId = searchParams.get("userId");
+
+  if (!userId) {
+    return NextResponse.json({ message: "userId is required" }, { status: 400 });
+  }
+
+  const wishlist = await Wishlist.findOne({ userId }).populate("items");
+
+  return NextResponse.json(wishlist || { userId, items: [] });
+}
+
+// ADD item to wishlist
+export async function POST(req: Request) {
+  try {
+    await connectDB();
+    const body = await req.json();
+    const { userId, itemId } = body;
+
+    let wishlist = await Wishlist.findOne({ userId });
+
+    // create if not exists
+    if (!wishlist) {
+      wishlist = await Wishlist.create({
+        userId,
+        items: [itemId],
+      });
+    } else {
+      // avoid duplicates
+      if (!wishlist.items.includes(itemId)) {
+        wishlist.items.push(itemId);
+        await wishlist.save();
+      }
+    }
+
+    return NextResponse.json(wishlist, { status: 201 });
+
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+// CLEAR wishlist
+export async function DELETE(req: Request) {
+  try {
+    await connectDB();
+
+    const { searchParams } = new URL(req.url);
+    const userId = searchParams.get("userId");
+
+    if (!userId) {
+      return NextResponse.json({ message: "userId is required" }, { status: 400 });
+    }
+
+    await Wishlist.findOneAndUpdate(
+      { userId },
+      { items: [] }
+    );
+
+    return NextResponse.json({ message: "Wishlist cleared" });
+
+  } catch (err: any) {
+    return NextResponse.json({ message: err.message }, { status: 400 });
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\layout.tsx */
+
+export const metadata = {
+  title: "My App",
+  description: "Generated by Next.js",
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en">
+      <body>{children}</body>
+    </html>
+  );
+}
+
+/* FILE: D:\nextjs\scooter-store\src\app\page.tsx */
+const page = () => {
+  return (
+    <div>page</div>
+  )
+}
+
+export default page
+
+/* FILE: D:\nextjs\scooter-store\src\lib\auth.ts */
+import jwt from "jsonwebtoken";
+
+export function getUserFromRequest(req: any) {
+  const token = req.headers.get("authorization")?.replace("Bearer ", "");
+  if (!token) return null;
+
+  try {
+    return jwt.verify(token, process.env.JWT_SECRET!);
+  } catch {
+    return null;
+  }
+}
+
+/* FILE: D:\nextjs\scooter-store\src\lib\db.ts */
+import mongoose from "mongoose";
+
+export const connectDB = async () => {
+  if (mongoose.connection.readyState === 1) return;
+
+  try {
+    await mongoose.connect(process.env.MONGODB_URI!);
+    console.log("MongoDB Connected");
+  } catch (error) {
+    console.error("DB Error:", error);
+  }
+};
+
+/* FILE: D:\nextjs\scooter-store\src\lib\utils.ts */
+
+/* FILE: D:\nextjs\scooter-store\src\middleware.ts */
+import { NextResponse } from "next/server";
+import jwt from "jsonwebtoken";
+
+const PUBLIC_ROUTES = [
+  "/api/users/login",
+  "/api/users",
+  "/api/search",
+  "/api/items",
+  "/api/brands",
+  "/api/item-types",
+];
+
+export async function middleware(req: any) {
+  const { pathname } = req.nextUrl;
+
+  // Allow public routes
+  if (PUBLIC_ROUTES.some((r) => pathname.startsWith(r))) {
+    return NextResponse.next();
+  }
+
+  const token = req.headers.get("authorization")?.replace("Bearer ", "");
+
+  if (!token) {
+    return NextResponse.json(
+      { message: "Unauthorized - Missing Token" },
+      { status: 401 }
+    );
+  }
+
+  try {
+    jwt.verify(token, process.env.JWT_SECRET!);
+    return NextResponse.next();
+  } catch (err) {
+    return NextResponse.json({ message: "Invalid Token" }, { status: 401 });
+  }
+}
+
+export const config = {
+  matcher: ["/api/:path*"],
+};
+
+/* FILE: D:\nextjs\scooter-store\src\models\Brand.ts */
+import { Schema, model, models } from "mongoose";
+
+const BrandSchema = new Schema(
+  {
+    name: { type: String, required: true, unique: true },
+    logo: { type: String },
+    country: { type: String },
+    isActive: { type: Boolean, default: true },
+  },
+  { timestamps: true }
+);
+
+export default models.Brand || model("Brand", BrandSchema);
+
+/* FILE: D:\nextjs\scooter-store\src\models\Cart.ts */
+import { Schema, model, models } from "mongoose";
+
+const CartSchema = new Schema(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    items: [
+      {
+        itemId: { type: Schema.Types.ObjectId, ref: "Item" },
+        quantity: { type: Number, default: 1 },
+      },
+    ],
+  },
+  { timestamps: true }
+);
+
+export default models.Cart || model("Cart", CartSchema);
+
+/* FILE: D:\nextjs\scooter-store\src\models\Coupon.ts */
+import { Schema, model, models } from "mongoose";
+
+const CouponSchema = new Schema(
+  {
+    code: { type: String, required: true, unique: true },
+
+    discountType: { type: String, enum: ["percent", "fixed"], required: true },
+    amount: { type: Number, required: true },
+
+    minOrder: { type: Number, default: 0 },
+    maxDiscount: { type: Number },
+
+    expiresAt: { type: Date, required: true },
+
+    isActive: { type: Boolean, default: true },
+  },
+  { timestamps: true }
+);
+
+export default models.Coupon || model("Coupon", CouponSchema);
+
+/* FILE: D:\nextjs\scooter-store\src\models\InvoiceDetail.ts */
+import { Schema, model, models } from "mongoose";
+
+const InvoiceDetailsSchema = new Schema(
+  {
+    invoiceId: {
+      type: Schema.Types.ObjectId,
+      ref: "InvoiceHeader",
+      required: true,
+    },
+    itemId: { type: Schema.Types.ObjectId, ref: "Item", required: true },
+    quantity: { type: Number, required: true },
+    price: { type: Number, required: true },
+    total: { type: Number, required: true },
+  },
+  { timestamps: true }
+);
+
+export default models.InvoiceDetails ||
+  model("InvoiceDetails", InvoiceDetailsSchema);
+
+/* FILE: D:\nextjs\scooter-store\src\models\InvoiceHeader.ts */
+import { Schema, model, models } from "mongoose";
+
+const InvoiceHeaderSchema = new Schema(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    paymentMethodId: {
+      type: Schema.Types.ObjectId,
+      ref: "PaymentMethod",
+      required: true,
+    },
+    addressId: { type: Schema.Types.ObjectId, ref: "UserAddress" },
+    statusId: { type: Schema.Types.ObjectId, ref: "OrderStatus" },
+
+    total: { type: Number, required: true },
+    discount: { type: Number, default: 0 },
+    finalTotal: { type: Number, required: true },
+  },
+  { timestamps: true }
+);
+
+export default models.InvoiceHeader ||
+  model("InvoiceHeader", InvoiceHeaderSchema);
+
+/* FILE: D:\nextjs\scooter-store\src\models\Item.ts */
+import { Schema, model, models } from "mongoose";
+import "@/models/ItemType";
+import "@/models/Brand";
+
+const ItemSchema = new Schema(
+  {
+    name: { type: String, required: true },
+    typeId: { type: Schema.Types.ObjectId, ref: "ItemType", required: true },
+    brandId: { type: Schema.Types.ObjectId, ref: "Brand", required: true },
+    description: { type: String },
+    price: { type: Number, required: true },
+    images: [{ type: String }],
+    isActive: { type: Boolean, default: true },
+  },
+  { timestamps: true }
+);
+
+export default models.Item || model("Item", ItemSchema);
+
+/* FILE: D:\nextjs\scooter-store\src\models\ItemType.ts */
+import { Schema, model, models } from "mongoose";
+
+const ItemTypeSchema = new Schema(
+  {
+    name: { type: String, required: true, unique: true },
+    description: { type: String },
+    image: { type: String }, 
+    isActive: { type: Boolean, default: true },
+  },
+  { timestamps: true }
+);
+
+const ItemType = models.ItemType || model("ItemType", ItemTypeSchema);
+export default ItemType;
+
+/* FILE: D:\nextjs\scooter-store\src\models\Notification.ts */
+import { Schema, model, models } from "mongoose";
+
+const NotificationSchema = new Schema(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+
+    title: { type: String, required: true },
+    body: { type: String, required: true },
+
+    isRead: { type: Boolean, default: false },
+  },
+  { timestamps: true }
+);
+
+export default models.Notification || model("Notification", NotificationSchema);
+
+/* FILE: D:\nextjs\scooter-store\src\models\order.ts */
+import mongoose, { Schema, model, models } from "mongoose";
+
+const orderItemSchema = new Schema({
+  product: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Product",
+    required: true,
+  },
+  quantity: {
+    type: Number,
+    required: true,
+    min: 1
+  },
+  price: {
+    type: Number,
+    required: true
+  },
+  total: {
+    type: Number,
+    required: true
+  }
+});
+
+const orderSchema = new Schema(
+  {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+
+    items: {
+      type: [orderItemSchema],
+      required: true,
+    },
+
+    subtotal: {
+      type: Number,
+      required: true,
+    },
+
+    discount: {
+      type: Number,
+      default: 0,
+    },
+
+    tax: {
+      type: Number,
+      default: 0,
+    },
+
+    total: {
+      type: Number,
+      required: true,
+    },
+
+    paymentType: {
+      type: String,
+      enum: ["cash", "card", "online"],
+      required: true,
+    },
+
+    status: {
+      type: String,
+      enum: ["pending", "completed", "cancelled"],
+      default: "pending",
+    },
+
+    notes: {
+      type: String,
+      default: "",
+    },
+  },
+  { timestamps: true }
+);
+
+const Order = models.Order || model("Order", orderSchema);
+export default Order;
+
+/* FILE: D:\nextjs\scooter-store\src\models\OrderStatus.ts */
+import { Schema, model, models } from "mongoose";
+
+const OrderStatusSchema = new Schema(
+  {
+    name: { type: String, required: true },
+  },
+  { timestamps: true }
+);
+
+export default models.OrderStatus ||
+  model("OrderStatus", OrderStatusSchema);
+
+/* FILE: D:\nextjs\scooter-store\src\models\PaymentMethod.ts */
+import { Schema, model, models } from "mongoose";
+
+const PaymentMethodSchema = new Schema(
+  {
+    name: { type: String, required: true },
+    type: { type: String, enum: ["cash", "visa", "online"], required: true },
+    isActive: { type: Boolean, default: true },
+  },
+  { timestamps: true }
+);
+
+export default models.PaymentMethod ||
+  model("PaymentMethod", PaymentMethodSchema);
+
+/* FILE: D:\nextjs\scooter-store\src\models\Review.ts */
+import { Schema, model, models } from "mongoose";
+
+const ReviewSchema = new Schema(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    itemId: { type: Schema.Types.ObjectId, ref: "Item", required: true },
+    rating: { type: Number, min: 1, max: 5, required: true },
+    comment: { type: String },
+  },
+  { timestamps: true }
+);
+
+export default models.Review || model("Review", ReviewSchema);
+
+/* FILE: D:\nextjs\scooter-store\src\models\Stock.ts */
+import { Schema, model, models } from "mongoose";
+
+const StockSchema = new Schema(
+  {
+    itemId: { type: Schema.Types.ObjectId, ref: "Item", required: true },
+    quantity: { type: Number, required: true, default: 0 },
+    minQuantity: { type: Number, default: 1 },
+    warehouse: { type: String, default: "Main" },
+  },
+  { timestamps: true }
+);
+
+export default models.Stock || model("Stock", StockSchema);
+
+/* FILE: D:\nextjs\scooter-store\src\models\StockTransaction.ts */
+import { Schema, model, models } from "mongoose";
+
+const StockTransactionSchema = new Schema(
+  {
+    itemId: { type: Schema.Types.ObjectId, ref: "Item", required: true },
+    quantity: { type: Number, required: true }, // ظ„ظˆ ط³ط§ظ„ط¨ ظٹط¨ظ‚ظ‰ ط¨ظٹط¹طŒ ظ…ظˆط¬ط¨ ظٹط¨ظ‚ظ‰ ط¥ط¶ط§ظپط©
+    movementType: {
+      type: String,
+      enum: ["IN", "OUT", "SALE", "RETURN"],
+      required: true,
+    },
+    reference: { type: String }, // ط±ظ‚ظ… ط§ظ„ظپط§طھظˆط±ط© ط£ظˆ ط§ظ„ط³ط¨ط¨
+    userId: { type: Schema.Types.ObjectId, ref: "User" },
+  },
+  { timestamps: true }
+);
+
+export default models.StockTransaction ||
+  model("StockTransaction", StockTransactionSchema);
+
+/* FILE: D:\nextjs\scooter-store\src\models\User.ts */
+import { Schema, model, models } from "mongoose";
+
+const UserSchema = new Schema(
+  {
+    fullName: { type: String, required: true },
+    email: { type: String, required: true, unique: true },
+    password: { type: String, required: true }, 
+    phone: { type: String },
+    role: {
+      type: String,
+      enum: ["admin", "customer", "warehouse"],
+      default: "customer",
+    },
+    isActive: { type: Boolean, default: true },
+  },
+  { timestamps: true }
+);
+
+export default models.User || model("User", UserSchema);
+
+/* FILE: D:\nextjs\scooter-store\src\models\UserAddress.ts */
+import { Schema, model, models } from "mongoose";
+
+const UserAddressSchema = new Schema(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    city: { type: String, required: true },
+    area: { type: String },
+    street: { type: String },
+    building: { type: String },
+    floor: { type: String },
+    landmark: { type: String },
+    isDefault: { type: Boolean, default: false },
+  },
+  { timestamps: true }
+);
+
+export default models.UserAddress ||
+  model("UserAddress", UserAddressSchema);
+
+/* FILE: D:\nextjs\scooter-store\src\models\Wishlist.ts */
+import { Schema, model, models } from "mongoose";
+
+const WishlistSchema = new Schema(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    items: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "Item",
+      },
+    ],
+  },
+  { timestamps: true }
+);
+
+export default models.Wishlist || model("Wishlist", WishlistSchema);
+
+/* FILE: D:\nextjs\scooter-store\src\types\index.d.tsx */

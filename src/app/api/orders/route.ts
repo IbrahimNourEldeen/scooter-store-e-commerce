@@ -1,132 +1,76 @@
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectDB } from "@/lib/db";
+import Cart from "@/models/Cart";
+import Stock from "@/models/Stock";
 import InvoiceHeader from "@/models/InvoiceHeader";
 import InvoiceDetail from "@/models/InvoiceDetail";
-import Item from "@/models/Item";
-import StockTransaction from "@/models/StockTransaction";
-import Cart from "@/models/Cart";
-import mongoose from "mongoose";
 
-// GET all orders
-export async function GET() {
-  await connectDB();
-
-  const orders = await InvoiceHeader.find()
-    .populate("userId", "name email")
-    .populate("paymentMethodId")
-    .populate("addressId")
-    .populate("statusId")
-    .sort({ createdAt: -1 });
-
-  return NextResponse.json(orders);
-}
-
-// CREATE order (Checkout)
 export async function POST(req: Request) {
   await connectDB();
-
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
-    const body = await req.json();
-    const { userId, paymentMethodId, addressId, discount = 0 } = body;
+    const { userId, paymentMethodId, addressId, discount = 0 } = await req.json();
 
-    // 1) Get Cart
+    // 1️⃣ جلب Cart
     const cart = await Cart.findOne({ userId }).session(session);
-
     if (!cart || cart.items.length === 0) {
-      return NextResponse.json(
-        { message: "Cart is empty" },
-        { status: 400 }
-      );
+      return NextResponse.json({ message: "Cart is empty" }, { status: 400 });
     }
 
     let total = 0;
 
-    // 2) حساب الإجمالي + التأكد من المخزون
+    // 2️⃣ تحقق من stock لكل عنصر
     for (const cartItem of cart.items) {
-      const item = await Item.findById(cartItem.itemId).session(session);
+      const stock = await Stock.findOne({ itemId: cartItem.itemId }).session(session);
+      if (!stock) throw new Error("Stock record not found for item");
+      if (stock.quantity < cartItem.quantity) throw new Error(`Not enough stock for item`);
 
-      if (!item) {
-        throw new Error("Item not found");
-      }
-
-      if (item.stock < cartItem.quantity) {
-        throw new Error(`Not enough stock for item: ${item.name}`);
-      }
-
-      total += item.price * cartItem.quantity;
+      total += cartItem.quantity * stock.itemId.price; // assuming price in Item model
     }
 
     const finalTotal = total - discount;
 
-    // 3) إنشاء InvoiceHeader
+    // 3️⃣ إنشاء InvoiceHeader
     const invoiceHeader = await InvoiceHeader.create(
-      [
-        {
-          userId,
-          paymentMethodId,
-          addressId,
-          total,
-          discount,
-          finalTotal,
-        },
-      ],
+      [{ userId, paymentMethodId, addressId, total, discount, finalTotal }],
       { session }
     );
-
     const invoiceId = invoiceHeader[0]._id;
 
-    // 4) إنشاء كل التفاصيل + خصم المخزون + stock transaction
+    // 4️⃣ إنشاء InvoiceDetails + تحديث stock + stock transaction
     for (const cartItem of cart.items) {
-      const item = await Item.findById(cartItem.itemId).session(session);
+      const stock = await Stock.findOne({ itemId: cartItem.itemId }).session(session);
 
-      // Create detail
       await InvoiceDetail.create(
         [
           {
             invoiceId,
             itemId: cartItem.itemId,
             quantity: cartItem.quantity,
-            price: item.price,
-            total: item.price * cartItem.quantity,
+            price: stock.itemId.price,
+            total: stock.itemId.price * cartItem.quantity,
           },
         ],
         { session }
       );
 
-      // خصم المخزون
-      item.stock -= cartItem.quantity;
-      await item.save({ session });
-
-      // تسجيل حركة مخزون
-      await StockTransaction.create(
-        [
-          {
-            itemId: cartItem.itemId,
-            quantity: -cartItem.quantity,
-            movementType: "SALE",
-            reference: `ORDER-${invoiceId}`,
-            userId,
-          },
-        ],
-        { session }
-      );
+      stock.quantity -= cartItem.quantity;
+      await stock.save({ session });
     }
 
-    // 5) مسح السلة
+    // 5️⃣ مسح cart
     cart.items = [];
     await cart.save({ session });
 
-    // 6) Commit
+    // 6️⃣ commit transaction
     await session.commitTransaction();
     session.endSession();
 
-    return NextResponse.json(
-      { message: "Order completed", invoiceId },
-      { status: 201 }
-    );
+    return NextResponse.json({ message: "Order completed", invoiceId }, { status: 201 });
+
   } catch (err: any) {
     await session.abortTransaction();
     session.endSession();
